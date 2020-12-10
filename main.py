@@ -4,6 +4,8 @@ from typing import List, Dict, Optional
 from discord import Member, Game
 from discord.ext.commands import Bot, Context
 
+from secret import token
+
 cards = [suit + str(number // 6 + 1) for number, suit in enumerate("RWLSND" * 12)]
 
 
@@ -26,7 +28,7 @@ class GameObj:
     async def deal(self, ctx: Context, player: int, cards: int):
         if cards > 72 - self.pos:
             cards = 72 - self.pos
-        self.hands[player] += self.deck[self.pos:self.pos + cards]
+        self.hands[player] += self.deck[self.pos : self.pos + cards]
         self.pos += cards
         await self.send_hand(ctx, player)
 
@@ -34,7 +36,9 @@ class GameObj:
         member = ctx.guild.get_member(player)
         if member is None:
             member = await ctx.guild.fetch_member(player)
-        await member.send("Your hand: " + ", ".join(sorted(self.hands[player], key=card_index)))
+        await member.send(
+            "Your hand: " + ", ".join(sorted(self.hands[player], key=card_index))
+        )
 
 
 bot = Bot(",")
@@ -72,6 +76,7 @@ def game(func):
             await func(ctx, games[ctx.channel.id], *args, **kwargs)
         else:
             await ctx.send("No game in current channel")
+
     return wrapper
 
 
@@ -80,7 +85,9 @@ async def start(ctx: Context, *players: Member):
     players = [player.id for player in players]
     game = GameObj(players)
     games[ctx.channel.id] = game
-    await ctx.send("Turn order: " + ", ".join(f"<@{player}>" for player in game.players))
+    await ctx.send(
+        "Turn order: " + ", ".join(f"<@{player}>" for player in game.players)
+    )
     for player in players:
         await game.deal(ctx, player, 9)
 
@@ -152,4 +159,4 @@ async def leave(ctx: Context, game: GameObj, player: Optional[Member]):
 
 
 if __name__ == "__main__":
-    bot.run("Nzg1NzQzODkwMzA4NzkyMzIx.X88TBQ.QIgS5uGjEQJPOI28febmk0MvOFM")
+    bot.run(token)
