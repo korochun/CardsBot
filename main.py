@@ -2,7 +2,7 @@ from random import shuffle
 from typing import List, Dict, Optional
 
 from discord import Member, Game
-from discord.ext.commands import Bot, Context
+from discord.ext.commands import Bot, Context, CheckFailure
 
 from secret import token
 
@@ -70,14 +70,12 @@ async def on_ready():
 #         await bot.process_commands(message)
 
 
-def game(func):
-    async def wrapper(ctx: Context, *args, **kwargs):
-        if ctx.channel.id in games:
-            await func(ctx, games[ctx.channel.id], *args, **kwargs)
-        else:
-            await ctx.send("No game in current channel")
-
-    return wrapper
+def get_game(ctx: Context):
+    if ctx.channel.id in games:
+        return games[ctx.channel.id]
+    else:
+        await ctx.send("No game in current channel")
+        raise CheckFailure("No game in current channel")
 
 
 @bot.command()
@@ -93,15 +91,14 @@ async def start(ctx: Context, *players: Member):
 
 
 @bot.command(name="hand")
-@game
-async def hand(ctx: Context, game: GameObj):
-    await game.send_hand(ctx, ctx.author.id)
+async def hand(ctx: Context):
+    await get_game(ctx).send_hand(ctx, ctx.author.id)
     await ctx.send("Sent you your hand")
 
 
 @bot.command(name="undo")
-@game
-async def undo(ctx: Context, game: GameObj):
+async def undo(ctx: Context):
+    game = get_game(ctx)
     if game.table is None:
         await ctx.send("Nothing to undo")
     else:
@@ -112,8 +109,8 @@ async def undo(ctx: Context, game: GameObj):
 
 
 @bot.command(name="draw")
-@game
-async def draw(ctx: Context, game: GameObj):
+async def draw(ctx: Context):
+    game = get_game(ctx)
     if game.players[game.turn] == ctx.author.id:
         await ctx.send(f"{ctx.author.mention} drew 4 cards")
         game.table = None
@@ -125,8 +122,8 @@ async def draw(ctx: Context, game: GameObj):
 
 
 @bot.command(name="play", aliases=["p"])
-@game
-async def play(ctx: Context, game: GameObj, card: str):
+async def play(ctx: Context, card: str):
+    game = get_game(ctx)
     if game.players[game.turn] != ctx.author.id:
         await ctx.send("It's not your turn!")
     else:
@@ -145,17 +142,31 @@ async def play(ctx: Context, game: GameObj, card: str):
             await ctx.send("You don't have that card!")
 
 
-@bot.command(name="leave")
-@game
-async def leave(ctx: Context, game: GameObj, player: Optional[Member]):
+def remove(game: GameObj, player: Member, replacement: Optional[Member]):
     if player is None:
-        game.players.remove(ctx.author.id)
-        game.hands.pop(ctx.author.id)
+        game.players.remove(replacement.id)
+        game.hands.pop(replacement.id)
+    else:
+        game.players[game.players.index(player.id)] = replacement.id
+        game.hands[replacement.id] = game.hands.pop(player.id)
+
+
+@bot.command(name="leave")
+async def leave(ctx: Context, player: Optional[Member]):
+    remove(get_game(ctx), ctx.author.id, player)
+    if player is None:
         await ctx.send(ctx.author.mention + " left the game")
     else:
-        game.players[game.players.index(ctx.author.id)] = player.id
-        game.hands[player.id] = game.hands.pop(ctx.author.id)
         await ctx.send(ctx.author.mention + " left the game for " + player.mention)
+
+
+@bot.command(name="kick")
+async def kick(ctx: Context, player: Member, replacement: Optional[Member]):
+    remove(get_game(ctx), ctx.author.id, player)
+    if replacement is None:
+        await ctx.send(player.mention + " was removed from the game")
+    else:
+        await ctx.send(player.mention + " was replaced by " + replacement.mention)
 
 
 if __name__ == "__main__":
